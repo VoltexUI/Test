@@ -1964,7 +1964,7 @@ local function clearHighlights()
     table.clear(highlights)
 end
 
-Tab:Toggle({
+EspTab:Toggle({
     Title = "Highlight Players",
     Value = false,
     Callback = function(state)
