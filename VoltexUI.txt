@@ -90,6 +90,7 @@ local FeatureStates = {
     FrontAutoJumpEnabled = true,
     AutoTicketFarm = false,
     AutoMoneyFarm = false,
+    HighlightPlayers = false,
 }
 
 local Window = WindUI:CreateWindow({
@@ -1933,65 +1934,80 @@ EspTab:Toggle({
     end
 })
 
-local tracerThread = nil
-local tracerLines = {}
+local highlightThread
+local highlights = {}
 
-local function cleanupTracers()
-    for _, line in pairs(tracerLines) do
-        if line then
-            pcall(function() line:Remove() end)
-        end
+local function getHighlight(char)
+    if highlights[char] then
+        return highlights[char]
     end
-    tracerLines = {}
+
+    local h = Instance.new("Highlight")
+    h.Adornee = char
+    h.FillTransparency = 0.5
+    h.OutlineTransparency = 0
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    h.Parent = char
+
+    highlights[char] = h
+    return h
 end
 
-EspTab:Toggle({
-    Title = "Tracer Downed Players",
+local function clearHighlights()
+    for _, h in pairs(highlights) do
+        if h then
+            pcall(function()
+                h:Destroy()
+            end)
+        end
+    end
+    table.clear(highlights)
+end
+
+Tab:Toggle({
+    Title = "Highlight Players",
     Value = false,
     Callback = function(state)
-        FeatureStates.TracerDowned = state
-        
-        if tracerThread then
-            coroutine.close(tracerThread)
-            tracerThread = nil
+        FeatureStates.HighlightPlayers = state
+
+        if highlightThread then
+            coroutine.close(highlightThread)
+            highlightThread = nil
         end
-        
-        cleanupTracers()
-        
+
+        clearHighlights()
         if not state then return end
-        
-        tracerThread = coroutine.create(function()
-            while FeatureStates.TracerDowned do
-                cleanupTracers()
-                
-                local folder = workspace:FindFirstChild("Game") and workspace.Game:FindFirstChild("Players")
-                if folder and Camera then
+
+        highlightThread = coroutine.create(function()
+            while FeatureStates.HighlightPlayers do
+                local folder = workspace:FindFirstChild("Game")
+                    and workspace.Game:FindFirstChild("Players")
+
+                if folder then
                     for _, char in ipairs(folder:GetChildren()) do
                         if not char:IsA("Model") then continue end
-                        if char:GetAttribute("Team") == "Nextbot" then continue end
                         if char.Name == LocalPlayer.Name then continue end
-                        if char:GetAttribute("Downed") ~= true then continue end
-                        
-                        local hrp = char:FindFirstChild("HumanoidRootPart")
-                        if not hrp then continue end
-                        
-                        local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-                        if onScreen then
-                            local tracer = Drawing.new("Line")
-                            tracer.Color = Color3.fromRGB(255, 60, 60)
-                            tracer.Thickness = 1.5
-                            tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-                            tracer.To = Vector2.new(pos.X, pos.Y)
-                            tracer.Visible = true
-                            table.insert(tracerLines, tracer)
+                        if char:GetAttribute("Team") == "Nextbot" then continue end
+
+                        local isDowned = char:GetAttribute("Downed") == true
+                        local h = getHighlight(char)
+
+                        local color = isDowned
+                            and Color3.fromRGB(255, 60, 60)
+                            or Color3.fromRGB(60, 255, 60)
+
+                        if h.FillColor ~= color then
+                            h.FillColor = color
+                            h.OutlineColor = color
                         end
                     end
                 end
-                task.wait(0.1)
+
+                task.wait(0.2)
             end
         end)
-        
-        coroutine.resume(tracerThread)
+
+        coroutine.resume(highlightThread)
     end
 })
 
